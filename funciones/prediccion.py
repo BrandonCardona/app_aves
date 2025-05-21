@@ -26,22 +26,25 @@ def clasificar_ave():
     if uploaded_file is not None and model:
         file_bytes = np.asarray(bytearray(uploaded_file.read()), dtype=np.uint8)
         image = cv2.imdecode(file_bytes, 1)
+        st.session_state.imagen_original = image
+        st.session_state.nombre_archivo_original = uploaded_file.name 
         image_resized = cv2.resize(image, (224, 224), interpolation=cv2.INTER_AREA)
         x = preprocess_input(np.expand_dims(image_resized, axis=0))
 
-        st.image(cv2.cvtColor(image, cv2.COLOR_BGR2RGB), caption="📷 Imagen cargada",width=224)
+        st.image(cv2.cvtColor(image, cv2.COLOR_BGR2RGB), caption="📷 Imagen cargada", width=224)
         st.info("🔍 Realizando predicción...")
 
         try:
             preds = model.predict(x)
-            top_indices = np.argsort(preds[0])[-3:][::-1]  
+            top_indices = np.argsort(preds[0])[-3:][::-1]
 
             st.success("🕊️ **Top 3 predicciones:**")
 
-            for rank, idx in enumerate(top_indices, start=1):
-                row = df.iloc[idx]  
-                prob = preds[0][idx] * 100
+            predicciones = []
 
+            for rank, idx in enumerate(top_indices, start=1):
+                row = df.iloc[idx]
+                prob = preds[0][idx] * 100
                 nombre_cientifico_url = row['nombre_cientifico'].replace(" ", "+")
 
                 st.markdown(f"""
@@ -54,6 +57,7 @@ def clasificar_ave():
                 """, unsafe_allow_html=True)
 
                 clase_dir = os.path.join(imagenes_base, f"clase{idx + 1}")
+                imagenes = []
                 if os.path.exists(clase_dir):
                     imagenes = sorted([
                         f for f in os.listdir(clase_dir)
@@ -64,14 +68,33 @@ def clasificar_ave():
                         cols = st.columns(len(imagenes_mostrar))
                         for col, nombre_imagen in zip(cols, imagenes_mostrar):
                             img_path = os.path.join(clase_dir, nombre_imagen)
-                            image = Image.open(img_path).copy()
-                            col.image(image, use_container_width=True, caption=nombre_imagen)
+                            col.image(Image.open(img_path).copy(), use_container_width=True, caption=nombre_imagen)
                     else:
                         st.warning("⚠️ No hay imágenes disponibles para esta clase.")
                 else:
                     st.warning("⚠️ No se encontró la carpeta de imágenes.")
 
+                predicciones.append({
+                    "idx": idx,
+                    "nombre": names[idx],
+                    "nombre_cientifico": row["nombre_cientifico"],
+                    "estado_conservacion": row["estado_conservacion"],
+                    "imagenes": [
+                        os.path.join(clase_dir, img) for img in imagenes[:3]
+                    ] if os.path.exists(clase_dir) else []
+                })
+
                 st.markdown("---")
+
+            st.session_state.predicciones = predicciones
+
+            st.session_state.opcion_seleccionada = None
+            st.session_state.coordenadas = None
+            st.session_state.prediccion_registrada = None
+
+            if st.button("✅ Registrar predicción", use_container_width=True):
+                st.session_state.section = "RegistroPrediccion"
+                st.rerun()
 
         except Exception as e:
             st.error(f"❌ Error al predecir: {e}")
